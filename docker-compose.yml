@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: eobtracker-backend
+    ports:
+      - "8140:80"
+    env_file:
+      - .env
+    environment:
+      - PORT=80
+    # Bridge network with NAT — backend reaches LAN/internet hosts (e.g. postgres.plud.org).
+    # Do not use host.docker.internal unless PostgreSQL runs on the Docker host itself.
+    networks:
+      eobtracker-network:
+        aliases:
+          - eobtracker-backend
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: eobtracker-frontend
+    ports:
+      - "8150:80"
+    depends_on:
+      - backend
+    networks:
+      eobtracker-network:
+        aliases:
+          - eobtracker-frontend
+    restart: unless-stopped
+
+networks:
+  eobtracker-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"

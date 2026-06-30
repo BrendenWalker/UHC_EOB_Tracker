@@ -1,0 +1,76 @@
+.claim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.claim-total {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #c0392b;
+}
+
+.tracking-fields {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.date-field,
+.notes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.date-field input,
+.notes-field textarea {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.notes-field textarea {
+  min-width: 280px;
+  resize: vertical;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.5rem 1rem;
+}
+
+.detail-grid dt {
+  color: #666;
+  font-weight: 600;
+}
+
+.code-hint {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.35rem;
+  background: #eef2f7;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: help;
+}
+
+.breadcrumb {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.breadcrumb a {
+  color: #2980b9;
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}

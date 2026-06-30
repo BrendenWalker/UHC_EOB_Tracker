@@ -1,0 +1,271 @@
+.app {
+  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  background-color: #1a5276;
+  color: white;
+  padding: 1rem 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.nav-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-logo {
+  font-size: 1.35rem;
+  font-weight: bold;
+  color: white;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.nav-link {
+  color: white;
+  text-decoration: none;
+  padding: 0.5rem 0.85rem;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.main-content {
+  flex: 1;
+  min-height: 0;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main-content > * {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.version-footer {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: #666;
+  text-align: center;
+  border-top: 1px solid #eee;
+  background: white;
+  flex-shrink: 0;
+}
+
+.page-header h1 {
+  font-size: 1.75rem;
+}
+
+.page-header p {
+  color: #555;
+  margin-top: 0.35rem;
+}
+
+.page-message {
+  padding: 2rem;
+  text-align: center;
+  color: #555;
+}
+
+.page-message.error {
+  color: #c0392b;
+}
+
+.panel {
+  background: white;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.panel h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+}
+
+.section-hint {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.data-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #444;
+}
+
+.data-table tr:hover td {
+  background: #fafbfc;
+}
+
+.table-link {
+  color: #1a5276;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.table-link:hover {
+  text-decoration: underline;
+}
+
+.amount {
+  font-weight: 600;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-unbilled {
+  background: #fdebd0;
+  color: #b9770e;
+}
+
+.status-unpaid {
+  background: #fadbd8;
+  color: #c0392b;
+}
+
+.status-paid {
+  background: #d5f5e3;
+  color: #1e8449;
+}
+
+.status-no_balance {
+  background: #eaecee;
+  color: #566573;
+}
+
+.empty-message {
+  color: #666;
+  padding: 1rem 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+button,
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  padding: 0.55rem 1rem;
+  border-radius: 4px;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary,
+button.btn-primary {
+  background: #1a5276;
+  color: white;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-secondary {
+  background: #ecf0f1;
+  color: #2c3e50;
+}
+
+.btn-danger {
+  background: #c0392b;
+  color: white;
+}
+
+.success-message {
+  color: #1e8449;
+  font-size: 0.9rem;
+}
+
+.error-inline {
+  color: #c0392b;
+  font-size: 0.9rem;
+}
+
+.breadcrumb {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.breadcrumb a {
+  color: #1a5276;
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.5rem 1rem;
+}
+
+.detail-grid dt {
+  color: #666;
+  font-weight: 600;
+}
