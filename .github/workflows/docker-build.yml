@@ -1,0 +1,270 @@
+name: Build and Publish Docker Images
+
+on:
+  push:
+    tags:
+      - 'eobtracker/*'   # e.g. eobtracker/1.0.0 (X.X.X only, no v prefix)
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: backend
+
+      - name: Verify backend entrypoint
+        run: node --check server.js
+        working-directory: backend
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+  validate-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR has version information
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if echo "$PR_TITLE $PR_BODY" | grep -qiE '(version|[0-9]+\.[0-9]+\.[0-9]+|semver|release|deps|bump)'; then
+            echo "✓ PR contains version information"
+            exit 0
+          fi
+
+          if git tag --merged HEAD | grep -qE '^eobtracker/[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "✓ Found version tags in branch history"
+            exit 0
+          fi
+
+          echo "::warning::PR does not appear to include version information"
+          echo "::notice::For releases, include version info in the PR title or description"
+          echo "::notice::Example: 'Release 1.0.0' or tag eobtracker/1.0.0 after merge"
+          exit 0
+
+  docker-verify:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build backend image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: false
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+
+      - name: Build frontend image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: false
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+
+  resolve-tag:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - name: Parse and validate release tag
+        id: parse
+        run: |
+          TAG_REF="${{ github.ref_name }}"
+
+          if [[ "$TAG_REF" != eobtracker/* ]] || [[ "$TAG_REF" == *"/v"* ]]; then
+            echo "::error::Tag '$TAG_REF' must be 'eobtracker/<version>' (e.g. eobtracker/1.2.3). Use X.X.X only, no 'v' prefix."
+            exit 1
+          fi
+
+          VERSION="${TAG_REF#eobtracker/}"
+
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+            echo "::error::Version '$VERSION' is not valid semver (e.g. 1.0.0, 1.0.0-beta.1)."
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Release tag resolves to version=${VERSION}"
+
+  build-and-push:
+    needs: [ci, resolve-tag]
+    if: success() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.resolve-tag.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Ensure Docker Hub credentials are set
+        run: |
+          if [ -z "${{ vars.DOCKER_HUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKER_HUB_TOKEN }}" ]; then
+            echo "::error::Set repository variable DOCKER_HUB_USERNAME and secret DOCKER_HUB_TOKEN."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Check if tag is on main branch
+        run: |
+          git fetch origin main || true
+          TAG_COMMIT="$(git rev-parse HEAD)"
+          if git show-ref --verify --quiet refs/remotes/origin/main && git merge-base --is-ancestor "${TAG_COMMIT}" origin/main 2>/dev/null; then
+            echo "IS_MAIN_BRANCH=true" >> $GITHUB_ENV
+            echo "Tag commit is on main - image will be tagged as 'latest' (if stable)"
+          else
+            echo "IS_MAIN_BRANCH=false" >> $GITHUB_ENV
+            echo "Tag commit is not on main - image will be tagged as 'beta'"
+          fi
+
+      - name: Set image names and tags
+        env:
+          DOCKER_HUB_USERNAME: ${{ vars.DOCKER_HUB_USERNAME }}
+        run: |
+          BACKEND_IMAGE_NAME="${{ vars.BACKEND_IMAGE_NAME }}"
+          FRONTEND_IMAGE_NAME="${{ vars.FRONTEND_IMAGE_NAME }}"
+          [ -z "${BACKEND_IMAGE_NAME}" ] && BACKEND_IMAGE_NAME="eobtracker-backend"
+          [ -z "${FRONTEND_IMAGE_NAME}" ] && FRONTEND_IMAGE_NAME="eobtracker-frontend"
+
+          BACKEND_IMAGE="${DOCKER_HUB_USERNAME}/${BACKEND_IMAGE_NAME}"
+          FRONTEND_IMAGE="${DOCKER_HUB_USERNAME}/${FRONTEND_IMAGE_NAME}"
+          echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> $GITHUB_ENV
+          echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> $GITHUB_ENV
+
+          BACKEND_TAGS="${BACKEND_IMAGE}:${VERSION}"
+          FRONTEND_TAGS="${FRONTEND_IMAGE}:${VERSION}"
+
+          IS_MAIN="${{ env.IS_MAIN_BRANCH }}"
+          if [ "${IS_MAIN}" = "true" ] && [[ ! "$VERSION" =~ - ]]; then
+            BACKEND_TAGS="${BACKEND_TAGS}"$'\n'"${BACKEND_IMAGE}:latest"
+            FRONTEND_TAGS="${FRONTEND_TAGS}"$'\n'"${FRONTEND_IMAGE}:latest"
+            echo "Tag on main, stable release - will also tag as 'latest'"
+          elif [ "${IS_MAIN}" = "false" ]; then
+            BACKEND_TAGS="${BACKEND_TAGS}"$'\n'"${BACKEND_IMAGE}:beta"
+            FRONTEND_TAGS="${FRONTEND_TAGS}"$'\n'"${FRONTEND_IMAGE}:beta"
+            echo "Tag not on main - will also tag as 'beta'"
+          else
+            echo "Pre-release on main - will not tag as 'latest'"
+          fi
+
+          echo "BACKEND_TAGS<<EOF" >> $GITHUB_ENV
+          echo "$BACKEND_TAGS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "FRONTEND_TAGS<<EOF" >> $GITHUB_ENV
+          echo "$FRONTEND_TAGS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_TAGS }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+          cache-from: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.FRONTEND_TAGS }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+          cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
+
+      - name: Update Docker Hub repository descriptions
+        env:
+          DOCKER_HUB_USERNAME: ${{ vars.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          update_dockerhub_description() {
+            local repo_name=$1
+            local description_file=$2
+            local token=$3
+
+            if [ ! -f "$description_file" ]; then
+              echo "Warning: Description file not found: $description_file"
+              return
+            fi
+
+            local description_json
+            description_json=$(cat "$description_file" | jq -Rs .)
+            local response
+            response=$(curl -s -w "\n%{http_code}" \
+              -X PATCH \
+              -H "Authorization: JWT ${token}" \
+              -H "Content-Type: application/json" \
+              -d "{\"full_description\": ${description_json}}" \
+              "https://hub.docker.com/v2/repositories/${DOCKER_HUB_USERNAME}/${repo_name}/")
+
+            local http_code
+            http_code=$(echo "$response" | tail -n1)
+            if [ "$http_code" = "200" ]; then
+              echo "✓ Updated description for ${DOCKER_HUB_USERNAME}/${repo_name}"
+            else
+              echo "✗ Failed to update ${DOCKER_HUB_USERNAME}/${repo_name} (HTTP ${http_code})"
+            fi
+          }
+
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST \
+            -d "{\"username\": \"${DOCKER_HUB_USERNAME}\", \"password\": \"${DOCKER_HUB_TOKEN}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Error: Failed to authenticate with Docker Hub API"
+            exit 1
+          fi
+
+          BACKEND_REPO_NAME=$(echo "${{ env.BACKEND_IMAGE }}" | cut -d'/' -f2)
+          FRONTEND_REPO_NAME=$(echo "${{ env.FRONTEND_IMAGE }}" | cut -d'/' -f2)
+          update_dockerhub_description "$BACKEND_REPO_NAME" "./docker-descriptions/backend.md" "$TOKEN"
+          update_dockerhub_description "$FRONTEND_REPO_NAME" "./docker-descriptions/frontend.md" "$TOKEN"

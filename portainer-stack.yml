@@ -1,0 +1,61 @@
+# Deploy in Portainer as a Compose stack on Docker Standalone (not a Swarm stack).
+# Under `networks:` declare BOTH the stack bridge (below) and the shared external net
+# (rename `edge` to `web` if you use that). Portainer may 500 if the bridge is only implicit.
+# One-time: docker network create edge   (or use your existing `web` network)
+#
+# Set stack environment variables from portainer-stack.env.example (DB_*, image names, ports).
+# Build and push images first, or point IMAGE_TAG at a local registry tag.
+version: '3.8'
+
+services:
+  backend:
+    image: ${DOCKER_HUB_REGISTRY_USERNAME}/${DOCKER_HUB_BACKEND_IMAGE_NAME:-eobtracker-backend}:${IMAGE_TAG:-latest}
+    container_name: eobtracker-backend
+    ports:
+      - "${BACKEND_PORT:-8140}:80"
+    environment:
+      - PORT=80
+      - VERSION=${IMAGE_TAG:-latest}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-eobtracker}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    networks:
+      eobtracker-network:
+        aliases:
+          - eobtracker-backend
+      edge:
+        aliases:
+          - eobtracker-backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    image: ${DOCKER_HUB_REGISTRY_USERNAME}/${DOCKER_HUB_FRONTEND_IMAGE_NAME:-eobtracker-frontend}:${IMAGE_TAG:-latest}
+    container_name: eobtracker-frontend
+    ports:
+      - "${FRONTEND_PORT:-8150}:80"
+    depends_on:
+      - backend
+    networks:
+      eobtracker-network:
+        aliases:
+          - eobtracker-frontend
+      edge:
+        aliases:
+          - eobtracker-frontend
+    restart: unless-stopped
+
+networks:
+  eobtracker-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+  edge:
+    external: true
