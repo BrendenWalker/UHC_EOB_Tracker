@@ -26,6 +26,17 @@ Self-hosted web app for tracking UnitedHealthcare Explanation of Benefits (EOB) 
 
 Default ports: backend **8140**, frontend **8150**.
 
+## Pre-built Docker images
+
+Public images are published on Docker Hub under [derpmhichurp](https://hub.docker.com/repositories/derpmhichurp). You do not need to build locally for production—use [portainer-stack.yml](portainer-stack.yml) or pull directly:
+
+```bash
+docker pull derpmhichurp/eobtracker-backend:latest
+docker pull derpmhichurp/eobtracker-frontend:latest
+```
+
+Tags: `latest` (stable releases from `main`), `beta` (pre-releases from other branches), or a pinned semver (e.g. `1.0.0`).
+
 ## Prerequisites
 
 - Docker and Docker Compose
@@ -83,22 +94,15 @@ docker compose up -d --build
 
 ## Portainer deployment
 
-For production on a Docker host managed by Portainer, use [portainer-stack.yml](portainer-stack.yml) with pre-built images (no `build:` context on the server).
+For production on a Docker host managed by Portainer, use [portainer-stack.yml](portainer-stack.yml) with the pre-built images above (no `build:` context on the server).
 
 1. Create the shared reverse-proxy network once (if you use HAProxy/Traefik on `edge`):
    ```bash
    docker network create edge
    ```
-2. Build and push images (example tags):
-   ```bash
-   docker build -f backend/Dockerfile -t youruser/eobtracker-backend:1.0.0 .
-   docker build -f frontend/Dockerfile -t youruser/eobtracker-frontend:1.0.0 .
-   docker push youruser/eobtracker-backend:1.0.0
-   docker push youruser/eobtracker-frontend:1.0.0
-   ```
-3. In Portainer: **Stacks → Add stack** → paste `portainer-stack.yml` (or point at the repo).
-4. Set environment variables from [portainer-stack.env.example](portainer-stack.env.example) (`DB_*`, registry username, `IMAGE_TAG`, ports).
-5. Deploy. Frontend nginx proxies `/api` to `eobtracker-backend` on the stack network; both services also join `edge` for your reverse proxy.
+2. In Portainer: **Stacks → Add stack** → paste `portainer-stack.yml` (or point at the repo).
+3. Set environment variables from [portainer-stack.env.example](portainer-stack.env.example) (`DB_*`, `IMAGE_TAG`, ports). `DOCKER_HUB_REGISTRY_USERNAME` defaults to `derpmhichurp`.
+4. Deploy. Frontend nginx proxies `/api` to `eobtracker-backend` on the stack network; both services also join `edge` for your reverse proxy.
 
 Default published ports: **8140** (API), **8150** (UI). Rename the external network in the stack file if yours is `web` instead of `edge`.
 

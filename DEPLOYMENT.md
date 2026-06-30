@@ -2,6 +2,24 @@
 
 CI/CD with GitHub Actions and deployment with Portainer.
 
+## Pre-built Docker images
+
+Images are **public** on Docker Hub: [derpmhichurp repositories](https://hub.docker.com/repositories/derpmhichurp).
+
+| Image | Description |
+|-------|-------------|
+| `derpmhichurp/eobtracker-backend` | Express API |
+| `derpmhichurp/eobtracker-frontend` | React SPA (nginx) |
+
+Pull examples:
+
+```bash
+docker pull derpmhichurp/eobtracker-backend:latest
+docker pull derpmhichurp/eobtracker-frontend:latest
+```
+
+Use `latest` for stable main releases, `beta` for pre-releases, or pin a semver tag in production.
+
 ## GitHub Actions Setup
 
 ### Required Secrets
@@ -58,12 +76,12 @@ git tag eobtracker/1.1.0-beta.1
 git push origin eobtracker/1.1.0-beta.1
 ```
 
-Example images (`youruser` = Docker Hub username):
+Example images:
 
-- `youruser/eobtracker-backend:1.0.0`
-- `youruser/eobtracker-backend:latest` (stable on main only)
-- `youruser/eobtracker-backend:beta` (tag not on main)
-- `youruser/eobtracker-frontend:1.0.0`
+- `derpmhichurp/eobtracker-backend:1.0.0`
+- `derpmhichurp/eobtracker-backend:latest` (stable on main only)
+- `derpmhichurp/eobtracker-backend:beta` (tag not on main)
+- `derpmhichurp/eobtracker-frontend:1.0.0`
 
 ### Pull Requests
 
@@ -78,7 +96,7 @@ On PRs to `main`, the workflow:
 ### Prerequisites
 
 1. Portainer installed
-2. Images built and pushed via GitHub Actions (or built locally)
+2. Pull public images from Docker Hub (or build locally if you prefer)
 3. PostgreSQL database with schema applied
 4. External `edge` network if using a shared reverse proxy:
    ```bash
@@ -94,7 +112,7 @@ On PRs to `main`, the workflow:
 ### Required Stack Variables
 
 ```env
-DOCKER_HUB_REGISTRY_USERNAME=your-dockerhub-username
+DOCKER_HUB_REGISTRY_USERNAME=derpmhichurp
 DOCKER_HUB_BACKEND_IMAGE_NAME=eobtracker-backend
 DOCKER_HUB_FRONTEND_IMAGE_NAME=eobtracker-frontend
 IMAGE_TAG=latest

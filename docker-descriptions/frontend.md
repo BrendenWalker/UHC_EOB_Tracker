@@ -16,7 +16,7 @@ Typically deployed with `eobtracker-backend` via Docker Compose or Portainer. St
 ```bash
 docker run -d \
   -p 8150:80 \
-  youruser/eobtracker-frontend:latest
+  derpmhichurp/eobtracker-frontend:latest
 ```
 
 The frontend expects the backend at `eobtracker-backend:80` on the same Docker network (configured in `nginx.conf`).

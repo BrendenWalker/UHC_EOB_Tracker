@@ -19,7 +19,7 @@ docker run -d \
   -e DB_USER=eobtracker \
   -e DB_PASSWORD=your-password \
   -p 8140:80 \
-  youruser/eobtracker-backend:latest
+  derpmhichurp/eobtracker-backend:latest
 ```
 
 ## Environment Variables
