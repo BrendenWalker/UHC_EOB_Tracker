@@ -1,9 +1,7 @@
-# Deploy in Portainer as a Compose stack on Docker Standalone (not a Swarm stack).
-# Uses published host ports only — no external reverse-proxy network required.
+# Optional Portainer stack when HAProxy/Traefik (or similar) runs on a shared external network.
+# Requires: docker network create edge   (rename `edge` below if yours is `web`, etc.)
 #
-# Set stack environment variables from portainer-stack.env.example (DB_*, image names, ports).
-# If you use HAProxy/Traefik on a shared Docker network, use portainer-stack.edge.yml instead
-# (or create the network once: docker network create edge).
+# Same env vars as portainer-stack.env.example.
 version: '3.8'
 
 services:
@@ -22,6 +20,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
     networks:
       eobtracker-network:
+        aliases:
+          - eobtracker-backend
+      edge:
         aliases:
           - eobtracker-backend
     restart: unless-stopped
@@ -43,6 +44,9 @@ services:
       eobtracker-network:
         aliases:
           - eobtracker-frontend
+      edge:
+        aliases:
+          - eobtracker-frontend
     restart: unless-stopped
 
 networks:
@@ -50,3 +54,5 @@ networks:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "true"
+  edge:
+    external: true

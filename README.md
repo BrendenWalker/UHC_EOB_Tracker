@@ -94,17 +94,15 @@ docker compose up -d --build
 
 ## Portainer deployment
 
-For production on a Docker host managed by Portainer, use [portainer-stack.yml](portainer-stack.yml) with the pre-built images above (no `build:` context on the server).
+For production on a Docker host managed by Portainer, use [portainer-stack.yml](portainer-stack.yml) with the pre-built images above (no `build:` context on the server). The default stack only uses published ports (**8140** / **8150**) and does **not** require an external `edge` network.
 
-1. Create the shared reverse-proxy network once (if you use HAProxy/Traefik on `edge`):
-   ```bash
-   docker network create edge
-   ```
-2. In Portainer: **Stacks → Add stack** → paste `portainer-stack.yml` (or point at the repo).
-3. Set environment variables from [portainer-stack.env.example](portainer-stack.env.example) (`DB_*`, `IMAGE_TAG`, ports). `DOCKER_HUB_REGISTRY_USERNAME` defaults to `derpmhichurp`.
-4. Deploy. Frontend nginx proxies `/api` to `eobtracker-backend` on the stack network; both services also join `edge` for your reverse proxy.
+1. In Portainer: **Stacks → Add stack** → paste `portainer-stack.yml` (or point at the repo).
+2. Set environment variables from [portainer-stack.env.example](portainer-stack.env.example) (`DB_*`, `IMAGE_TAG`, ports). `DOCKER_HUB_REGISTRY_USERNAME` defaults to `derpmhichurp`.
+3. Deploy. Frontend nginx proxies `/api` to `eobtracker-backend` on the stack network.
 
-Default published ports: **8140** (API), **8150** (UI). Rename the external network in the stack file if yours is `web` instead of `edge`.
+If you route traffic through HAProxy/Traefik on a shared Docker network named `edge`, use [portainer-stack.edge.yml](portainer-stack.edge.yml) instead and run once on the host: `docker network create edge`.
+
+Default published ports: **8140** (API), **8150** (UI).
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for GitHub Actions setup, release tagging (`eobtracker/1.0.0` → `latest` or `beta`), and full Portainer instructions.
 

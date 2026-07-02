@@ -98,16 +98,24 @@ On PRs to `main`, the workflow:
 1. Portainer installed
 2. Pull public images from Docker Hub (or build locally if you prefer)
 3. PostgreSQL database with schema applied
-4. External `edge` network if using a shared reverse proxy:
-   ```bash
-   docker network create edge
-   ```
 
-### Deploy
+### Deploy (default)
 
-1. **Stacks → Add stack** → paste [portainer-stack.yml](portainer-stack.yml)
+1. **Stacks → Add stack** → paste [portainer-stack.yml](portainer-stack.yml) (published ports only; no external network).
 2. Set environment variables from [portainer-stack.env.example](portainer-stack.env.example)
 3. Deploy
+
+Access: frontend **8150**, API **8140**.
+
+### Deploy with reverse proxy (`edge` network)
+
+If HAProxy/Traefik uses a shared Docker network:
+
+```bash
+docker network create edge
+```
+
+Use [portainer-stack.edge.yml](portainer-stack.edge.yml) instead of `portainer-stack.yml`. Rename `edge` in that file if your network is `web`, etc.
 
 ### Required Stack Variables
 
