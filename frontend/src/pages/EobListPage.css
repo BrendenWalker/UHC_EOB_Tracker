@@ -5,8 +5,3 @@
   gap: 1rem;
   flex-wrap: wrap;
 }
-
-.mono {
-  font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
-}

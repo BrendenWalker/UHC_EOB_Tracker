@@ -17,6 +17,14 @@ export function formatDate(value) {
   });
 }
 
+export function formatDateSpan(start, end) {
+  const startKey = start ? String(start).slice(0, 10) : '';
+  const endKey = end ? String(end).slice(0, 10) : '';
+  if (!startKey) return '—';
+  if (!endKey || startKey === endKey) return formatDate(startKey);
+  return `${formatDate(startKey)} – ${formatDate(endKey)}`;
+}
+
 export function toInputDate(value) {
   if (!value) return '';
   return String(value).slice(0, 10);

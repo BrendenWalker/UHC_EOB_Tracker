@@ -218,7 +218,11 @@ app.get('/api/eobs', async (req, res) => {
     const result = await pool.query(
       `SELECT e.*,
         COUNT(DISTINCT c.id)::int AS claim_count,
-        COALESCE(SUM(cl.amount_owed), 0)::numeric AS total_owed
+        COALESCE(SUM(cl.amount_owed), 0)::numeric AS total_owed,
+        MIN(c.billed_date) AS billed_date,
+        MAX(c.billed_date) AS billed_date_end,
+        MIN(c.paid_date) AS paid_date,
+        MAX(c.paid_date) AS paid_date_end
        FROM eob_statement e
        LEFT JOIN claim c ON c.eob_statement_id = e.id
        LEFT JOIN claim_line cl ON cl.claim_id = c.id
