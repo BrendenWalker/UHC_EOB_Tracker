@@ -53,7 +53,8 @@ export default function EobListPage() {
                 <th>Service period</th>
                 <th>Member</th>
                 <th>Claims</th>
-                <th>Total owed</th>
+                <th>Billed</th>
+                <th>Owed</th>
                 <th>Billed date</th>
                 <th>Paid date</th>
               </tr>
@@ -72,6 +73,7 @@ export default function EobListPage() {
                   </td>
                   <td>{eob.member_name || '—'}</td>
                   <td>{eob.claim_count}</td>
+                  <td className="amount">{formatCurrency(eob.total_provider_billed)}</td>
                   <td className="amount">{formatCurrency(eob.total_owed)}</td>
                   <td>{formatDateSpan(eob.billed_date, eob.billed_date_end)}</td>
                   <td>{formatDateSpan(eob.paid_date, eob.paid_date_end)}</td>
