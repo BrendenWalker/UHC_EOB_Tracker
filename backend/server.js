@@ -584,6 +584,68 @@ app.put('/api/claims/:id/lines/:lineId', async (req, res) => {
   }
 });
 
+app.post('/api/claims/:id/lines', async (req, res) => {
+  try {
+    const claim = await fetchClaimById(req.params.id);
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+
+    const {
+      service_description,
+      service_date_start,
+      service_date_end,
+      processing_code,
+      processing_code_description,
+      provider_billed,
+      amount_saved,
+      plan_allowed,
+      plan_paid,
+      applied_deductible,
+      copay,
+      coinsurance,
+      plan_not_cover,
+      amount_owed,
+    } = req.body;
+
+    if (!service_description) {
+      return res.status(400).json({ error: 'service_description is required' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO claim_line (
+        claim_id, service_description, service_date_start, service_date_end,
+        processing_code, processing_code_description,
+        provider_billed, amount_saved, plan_allowed, plan_paid,
+        applied_deductible, copay, coinsurance, plan_not_cover, amount_owed
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *`,
+      [
+        req.params.id,
+        service_description,
+        service_date_start || null,
+        service_date_end || null,
+        processing_code || null,
+        processing_code_description || null,
+        provider_billed ?? 0,
+        amount_saved ?? 0,
+        plan_allowed ?? 0,
+        plan_paid ?? 0,
+        applied_deductible ?? 0,
+        copay ?? 0,
+        coinsurance ?? 0,
+        plan_not_cover ?? 0,
+        amount_owed ?? 0,
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating claim line:', error);
+    res.status(500).json({ error: 'Failed to create claim line' });
+  }
+});
+
 function startServer(portToUse = port) {
   return app.listen(portToUse, () => {
     console.log(`Server running on port ${portToUse}`);

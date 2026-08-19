@@ -33,5 +33,7 @@ export const getClaim = (id) => api.get(`/claims/${id}`);
 export const updateClaim = (id, data) => api.patch(`/claims/${id}`, data);
 export const updateClaimLine = (claimId, lineId, data) =>
   api.put(`/claims/${claimId}/lines/${lineId}`, data);
+export const createClaimLine = (claimId, data) =>
+  api.post(`/claims/${claimId}/lines`, data);
 
 export default api;

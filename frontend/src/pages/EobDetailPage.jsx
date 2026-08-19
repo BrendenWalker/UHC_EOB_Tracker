@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { deleteEob, getEob } from '../api/api';
+import { deleteEob, getEob, createClaimLine } from '../api/api';
 import ClaimTable from '../components/ClaimTable';
-import { formatCurrency, formatDate } from '../utils/format';
+import { formatCurrency, formatDate, toInputDate } from '../utils/format';
 import './EobDetailPage.css';
 
 export default function EobDetailPage() {
@@ -12,14 +12,15 @@ export default function EobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     loadEob();
   }, [id]);
 
-  const loadEob = async () => {
+  const loadEob = async ({ quiet } = {}) => {
     try {
-      setLoading(true);
+      if (!quiet) setLoading(true);
       const response = await getEob(id);
       setEob(response.data);
       setError(null);
@@ -44,9 +45,33 @@ export default function EobDetailPage() {
     }
   };
 
+  const handleAssignLeftover = async (claimId, amount) => {
+    try {
+      setAssigning(true);
+      await createClaimLine(claimId, {
+        service_description: 'Amount you owe',
+        service_date_start: toInputDate(eob.service_period_start) || null,
+        amount_owed: amount,
+      });
+      await loadEob({ quiet: true });
+    } catch (err) {
+      setError('Failed to assign leftover amount to claim');
+      console.error(err);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   if (loading) return <div className="page-message">Loading EOB...</div>;
   if (error && !eob) return <div className="page-message error">{error}</div>;
   if (!eob) return null;
+
+  const claimsOwed = (eob.claims || []).reduce((sum, claim) => sum + Number(claim.total_owed || 0), 0);
+  const headerOwed = Number(eob.total_amount_owed || 0);
+  const leftover = Math.round((headerOwed - claimsOwed) * 100) / 100;
+  const owedMismatch = Math.abs(leftover) >= 0.01;
+  const emptyClaims = (eob.claims || []).filter((claim) => !(claim.lines || []).length);
+  const assignTarget = leftover > 0 && emptyClaims.length === 1 ? emptyClaims[0] : null;
 
   return (
     <div className="eob-detail-page page-scroll">
@@ -81,6 +106,25 @@ export default function EobDetailPage() {
           <dt>Total you owe</dt>
           <dd className="amount">{formatCurrency(eob.total_amount_owed)}</dd>
         </dl>
+        {owedMismatch && (
+          <div className="owed-mismatch">
+            <p>
+              Statement total {formatCurrency(headerOwed)} does not match claim line items{' '}
+              {formatCurrency(claimsOwed)}.
+            </p>
+            {assignTarget && (
+              <button
+                type="button"
+                onClick={() => handleAssignLeftover(assignTarget.id, leftover)}
+                disabled={assigning}
+              >
+                {assigning
+                  ? 'Assigning...'
+                  : `Assign ${formatCurrency(leftover)} to ${assignTarget.provider_name}`}
+              </button>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="panel">

@@ -5,6 +5,10 @@ function parseMoney(value) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function roundMoney(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
 function parseDateMmDdYyyy(value) {
   if (!value) return null;
   const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -47,18 +51,25 @@ function parseProcessingCodes(text) {
   return codes;
 }
 
-const AMOUNT_LINE_REGEX =
-  /^([A-Z0-9]{2})\s*((?:\$[\d,]+\.\d{2}\s*){9})$/;
+const MONEY_RE = /\$[\d,]+\.\d{2}/g;
+const CODE_AMOUNT_LINE_REGEX = /^([A-Z0-9]{2})\s*((?:\$[\d,]+\.\d{2}\s*)+)$/;
+const MONEY_ONLY_LINE_REGEX = /^(?:\$[\d,]+\.\d{2}\s*)+$/;
+const CODE_ONLY_REGEX = /^[A-Z0-9]{2}$/;
+const DATE_LINE_REGEX =
+  /^(\d{2}\/\d{2}\/\d{4})(?:\s*-\s*(\d{2}\/\d{2}\/\d{4}))?$/;
+const INLINE_DATE_REGEX =
+  /^(.+?)\s+(\d{2}\/\d{2}\/\d{4})(?:\s*-\s*(\d{2}\/\d{2}\/\d{4}))?$/;
+const TOTAL_AMOUNTS_REGEX =
+  /^Total amount\s+((?:\$[\d,]+\.\d{2}\s*)+)$/i;
 
-function parseAmountLine(line) {
-  const match = AMOUNT_LINE_REGEX.exec(line);
-  if (!match) return null;
+function extractMoneyValues(text) {
+  return [...String(text).matchAll(MONEY_RE)].map((m) => parseMoney(m[0]));
+}
 
-  const amounts = [...match[2].matchAll(/\$[\d,]+\.\d{2}/g)].map((m) => parseMoney(m[0]));
-  if (amounts.length !== 9) return null;
-
+function amountsToFields(processingCode, amounts) {
+  if (!amounts || amounts.length !== 9) return null;
   return {
-    processing_code: match[1],
+    processing_code: processingCode || null,
     provider_billed: amounts[0],
     amount_saved: amounts[1],
     plan_allowed: amounts[2],
@@ -71,11 +82,117 @@ function parseAmountLine(line) {
   };
 }
 
-const DATE_LINE_REGEX =
-  /^(\d{2}\/\d{2}\/\d{4})(?:\s*-\s*(\d{2}\/\d{2}\/\d{4}))?$/;
+function isIgnorableLine(line) {
+  if (!line) return true;
+  return (
+    line.startsWith('Provider:') ||
+    line.startsWith('Status:') ||
+    line.startsWith('Patient account') ||
+    line.startsWith('Claim number:') ||
+    line.startsWith('Billed Savings') ||
+    line.startsWith('Services received') ||
+    line.startsWith('Got questions') ||
+    line.startsWith('STD-EOB') ||
+    line.startsWith('Page ') ||
+    /^claim detail for/i.test(line) ||
+    /^this statement$/i.test(line) ||
+    line.includes('Amount you owe**')
+  );
+}
 
-const TOTAL_LINE_REGEX =
-  /^Total amount\s+(\$[\d,]+\.\d{2})/i;
+function nextIndex(lines, index) {
+  let i = index;
+  while (i < lines.length && isIgnorableLine(lines[i])) i += 1;
+  return i;
+}
+
+function previousIndex(lines, index) {
+  let i = index;
+  while (i >= 0 && isIgnorableLine(lines[i])) i -= 1;
+  return i;
+}
+
+function consumeWrappedAmounts(lines, startIndex, amounts) {
+  let i = startIndex;
+  const collected = amounts.slice();
+  while (collected.length < 9 && i < lines.length) {
+    i = nextIndex(lines, i);
+    if (i >= lines.length || !MONEY_ONLY_LINE_REGEX.test(lines[i])) break;
+    collected.push(...extractMoneyValues(lines[i]));
+    i += 1;
+  }
+  return { amounts: collected.slice(0, 9), nextIndex: i };
+}
+
+function parseAmountLine(line) {
+  const match = CODE_AMOUNT_LINE_REGEX.exec(line);
+  if (!match) return null;
+  return amountsToFields(match[1], extractMoneyValues(match[2]));
+}
+
+function readAmountFields(lines, startIndex) {
+  let i = nextIndex(lines, startIndex);
+  if (i >= lines.length) return { parsed: null, nextIndex: startIndex };
+
+  let code = null;
+  let amounts = [];
+  const line = lines[i];
+
+  const coded = CODE_AMOUNT_LINE_REGEX.exec(line);
+  if (coded) {
+    code = coded[1];
+    amounts = extractMoneyValues(coded[2]);
+    i += 1;
+  } else if (CODE_ONLY_REGEX.test(line)) {
+    const amountIndex = nextIndex(lines, i + 1);
+    if (amountIndex >= lines.length || !MONEY_ONLY_LINE_REGEX.test(lines[amountIndex])) {
+      return { parsed: null, nextIndex: startIndex };
+    }
+    code = line;
+    amounts = extractMoneyValues(lines[amountIndex]);
+    i = amountIndex + 1;
+  } else {
+    return { parsed: null, nextIndex: startIndex };
+  }
+
+  const wrapped = consumeWrappedAmounts(lines, i, amounts);
+  const parsed = amountsToFields(code, wrapped.amounts);
+  if (!parsed) return { parsed: null, nextIndex: startIndex };
+  return { parsed, nextIndex: wrapped.nextIndex };
+}
+
+function readTotalAmountFields(lines, startIndex) {
+  const line = lines[startIndex];
+  const match = TOTAL_AMOUNTS_REGEX.exec(line);
+  if (!match) return { parsed: null, nextIndex: startIndex + 1 };
+
+  const wrapped = consumeWrappedAmounts(lines, startIndex + 1, extractMoneyValues(match[1]));
+  return {
+    parsed: amountsToFields(null, wrapped.amounts),
+    nextIndex: wrapped.nextIndex,
+  };
+}
+
+function makeClaimLine(description, startDate, endDate, parsedAmounts, processingCodes) {
+  return {
+    service_description: description,
+    service_date_start: startDate,
+    service_date_end: endDate,
+    processing_code: parsedAmounts.processing_code,
+    processing_code_description: parsedAmounts.processing_code
+      ? processingCodes[parsedAmounts.processing_code] || null
+      : null,
+    provider_billed: parsedAmounts.provider_billed,
+    amount_saved: parsedAmounts.amount_saved,
+    plan_allowed: parsedAmounts.plan_allowed,
+    plan_paid: parsedAmounts.plan_paid,
+    applied_deductible: parsedAmounts.applied_deductible,
+    copay: parsedAmounts.copay,
+    coinsurance: parsedAmounts.coinsurance,
+    plan_not_cover: parsedAmounts.plan_not_cover,
+    amount_owed: parsedAmounts.amount_owed,
+  };
+}
 
 function parseClaimBlock(block, processingCodes, warnings) {
   const providerMatch = block.match(/^Provider:\s*(.+?)(?:\n|$)/m);
@@ -94,60 +211,84 @@ function parseClaimBlock(block, processingCodes, warnings) {
   };
 
   const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+  let fallbackTotal = null;
   let i = 0;
+
   while (i < lines.length) {
     const line = lines[i];
-    if (
-      line.startsWith('Provider:') ||
-      line.startsWith('Status:') ||
-      line.startsWith('Patient account') ||
-      line.startsWith('Claim number:') ||
-      line.startsWith('Billed Savings') ||
-      line.startsWith('Services received') ||
-      line.startsWith('Total amount') ||
-      line.startsWith('Got questions') ||
-      line.startsWith('STD-EOB') ||
-      line.startsWith('Page ') ||
-      line.includes('Amount you owe**')
-    ) {
+
+    if (isIgnorableLine(line)) {
       i += 1;
       continue;
     }
 
-    const dateMatch = DATE_LINE_REGEX.exec(line);
-    if (dateMatch && i > 0) {
-      const description = lines[i - 1];
-      const amountLine = lines[i + 1];
-      const parsedAmounts = amountLine ? parseAmountLine(amountLine) : null;
+    if (/^Total amount\b/i.test(line)) {
+      const total = readTotalAmountFields(lines, i);
+      if (total.parsed && !fallbackTotal) fallbackTotal = total.parsed;
+      i = total.nextIndex;
+      continue;
+    }
 
-      if (parsedAmounts && description && !description.startsWith('Provider')) {
-        claim.lines.push({
-          service_description: description,
-          service_date_start: parseDateMmDdYyyy(dateMatch[1]),
-          service_date_end: dateMatch[2] ? parseDateMmDdYyyy(dateMatch[2]) : null,
-          processing_code: parsedAmounts.processing_code,
-          processing_code_description: processingCodes[parsedAmounts.processing_code] || null,
-          provider_billed: parsedAmounts.provider_billed,
-          amount_saved: parsedAmounts.amount_saved,
-          plan_allowed: parsedAmounts.plan_allowed,
-          plan_paid: parsedAmounts.plan_paid,
-          applied_deductible: parsedAmounts.applied_deductible,
-          copay: parsedAmounts.copay,
-          coinsurance: parsedAmounts.coinsurance,
-          plan_not_cover: parsedAmounts.plan_not_cover,
-          amount_owed: parsedAmounts.amount_owed,
-        });
-        i += 2;
+    const dateOnly = DATE_LINE_REGEX.exec(line);
+    if (dateOnly) {
+      const descIndex = previousIndex(lines, i - 1);
+      const description = descIndex >= 0 ? lines[descIndex] : '';
+      const amounts = readAmountFields(lines, i + 1);
+      if (
+        amounts.parsed &&
+        description &&
+        !isIgnorableLine(description) &&
+        !DATE_LINE_REGEX.test(description) &&
+        !CODE_AMOUNT_LINE_REGEX.test(description)
+      ) {
+        claim.lines.push(
+          makeClaimLine(
+            description,
+            parseDateMmDdYyyy(dateOnly[1]),
+            dateOnly[2] ? parseDateMmDdYyyy(dateOnly[2]) : null,
+            amounts.parsed,
+            processingCodes
+          )
+        );
+        i = amounts.nextIndex;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+
+    const inlineDate = INLINE_DATE_REGEX.exec(line);
+    if (inlineDate && !CODE_AMOUNT_LINE_REGEX.test(line) && !/^Total amount\b/i.test(line)) {
+      const description = inlineDate[1].trim();
+      const amounts = readAmountFields(lines, i + 1);
+      if (amounts.parsed && description && !isIgnorableLine(description)) {
+        claim.lines.push(
+          makeClaimLine(
+            description,
+            parseDateMmDdYyyy(inlineDate[2]),
+            inlineDate[3] ? parseDateMmDdYyyy(inlineDate[3]) : null,
+            amounts.parsed,
+            processingCodes
+          )
+        );
+        i = amounts.nextIndex;
         continue;
       }
     }
 
-    if (TOTAL_LINE_REGEX.test(line)) {
-      i += 1;
-      continue;
-    }
-
     i += 1;
+  }
+
+  if (claim.lines.length === 0 && fallbackTotal) {
+    claim.lines.push(
+      makeClaimLine(
+        'Total amount',
+        null,
+        null,
+        fallbackTotal,
+        processingCodes
+      )
+    );
   }
 
   if (claim.lines.length === 0) {
@@ -187,6 +328,44 @@ function dedupeClaims(claims) {
   return result;
 }
 
+function sumClaimOwed(claim) {
+  return roundMoney(
+    (claim.lines || []).reduce((sum, line) => sum + Number(line.amount_owed || 0), 0)
+  );
+}
+
+function applyHeaderOwedRemainder(statement, warnings) {
+  const headerOwed = roundMoney(statement.total_amount_owed || 0);
+  const lineOwed = roundMoney(
+    statement.claims.reduce((sum, claim) => sum + sumClaimOwed(claim), 0)
+  );
+  const remainder = roundMoney(headerOwed - lineOwed);
+  if (Math.abs(remainder) < 0.005) return;
+
+  const emptyClaims = statement.claims.filter((claim) => (claim.lines || []).length === 0);
+  if (emptyClaims.length === 1 && remainder > 0) {
+    emptyClaims[0].lines.push(
+      makeClaimLine(
+        'Amount you owe',
+        statement.service_period_start,
+        null,
+        amountsToFields(null, [0, 0, 0, 0, 0, 0, 0, 0, remainder]),
+        {}
+      )
+    );
+    warnings.push(
+      `Attributed leftover statement owed $${remainder.toFixed(2)} to claim ${
+        emptyClaims[0].claim_number || emptyClaims[0].provider_name
+      }`
+    );
+    return;
+  }
+
+  warnings.push(
+    `Statement owed $${headerOwed.toFixed(2)} does not match parsed line items $${lineOwed.toFixed(2)}`
+  );
+}
+
 function normalizePdfText(text) {
   return text
     .split('\n')
@@ -220,7 +399,7 @@ function parseUhcEobText(text) {
     claims: [],
   };
 
-  const claimSection = normalizedText.split(/Claim detail for/i).slice(1).join('Claim detail for');
+  const claimSection = normalizedText.split(/Claim detail for/i).slice(1).join('\n');
   const blocks = claimSection.split(/(?=Provider:)/i).filter((b) => b.includes('Claim number:'));
 
   const parsedClaims = [];
@@ -230,6 +409,7 @@ function parseUhcEobText(text) {
   }
 
   statement.claims = dedupeClaims(parsedClaims);
+  applyHeaderOwedRemainder(statement, warnings);
 
   if (!statement.member_name) {
     warnings.push('Could not parse member name from EOB header');
@@ -252,4 +432,5 @@ module.exports = {
   parseUhcEobPdf,
   parseMoney,
   parseDateMmDdYyyy,
+  parseAmountLine,
 };

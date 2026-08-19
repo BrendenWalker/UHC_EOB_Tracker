@@ -1,1 +1,11 @@
 /* shared with ClaimDetailPage */
+
+.owed-mismatch {
+  margin-top: 0.75rem;
+  color: #c0392b;
+  font-size: 0.9rem;
+}
+
+.owed-mismatch button {
+  margin-top: 0.5rem;
+}
