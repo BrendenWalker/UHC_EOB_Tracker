@@ -12,6 +12,7 @@ const {
   getEobDedupeKey,
   findExistingEob,
 } = require('./lib/eobDuplicate');
+const { parseOptionalMoney, parseOptionalNotes, InvalidLineFieldError } = require('./lib/claimLineFields');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config();
@@ -534,14 +535,16 @@ app.put('/api/claims/:id/lines/:lineId', async (req, res) => {
       plan_not_cover,
       amount_owed,
     } = req.body;
+    const actualBilled = parseOptionalMoney(req.body.actual_billed);
+    const notes = parseOptionalNotes(req.body.notes);
 
     const result = await pool.query(
       `UPDATE claim_line SET
         service_description = COALESCE($1, service_description),
-        service_date_start = $2,
-        service_date_end = $3,
-        processing_code = $4,
-        processing_code_description = $5,
+        service_date_start = COALESCE($2, service_date_start),
+        service_date_end = COALESCE($3, service_date_end),
+        processing_code = COALESCE($4, processing_code),
+        processing_code_description = COALESCE($5, processing_code_description),
         provider_billed = COALESCE($6, provider_billed),
         amount_saved = COALESCE($7, amount_saved),
         plan_allowed = COALESCE($8, plan_allowed),
@@ -551,8 +554,10 @@ app.put('/api/claims/:id/lines/:lineId', async (req, res) => {
         coinsurance = COALESCE($12, coinsurance),
         plan_not_cover = COALESCE($13, plan_not_cover),
         amount_owed = COALESCE($14, amount_owed),
+        actual_billed = CASE WHEN $15 THEN $16::numeric ELSE actual_billed END,
+        notes = CASE WHEN $17 THEN $18 ELSE notes END,
         modified = CURRENT_TIMESTAMP
-       WHERE id = $15 AND claim_id = $16
+       WHERE id = $19 AND claim_id = $20
        RETURNING *`,
       [
         service_description || null,
@@ -569,6 +574,10 @@ app.put('/api/claims/:id/lines/:lineId', async (req, res) => {
         coinsurance ?? null,
         plan_not_cover ?? null,
         amount_owed ?? null,
+        actualBilled.present,
+        actualBilled.value ?? null,
+        notes.present,
+        notes.value ?? null,
         req.params.lineId,
         req.params.id,
       ]
@@ -579,6 +588,9 @@ app.put('/api/claims/:id/lines/:lineId', async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (error) {
+    if (error instanceof InvalidLineFieldError) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Error updating claim line:', error);
     res.status(500).json({ error: 'Failed to update claim line' });
   }

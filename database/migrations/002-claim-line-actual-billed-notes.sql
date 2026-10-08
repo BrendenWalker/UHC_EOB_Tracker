@@ -1,0 +1,2 @@
+ALTER TABLE claim_line ADD COLUMN IF NOT EXISTS actual_billed DECIMAL(12, 2);
+ALTER TABLE claim_line ADD COLUMN IF NOT EXISTS notes TEXT;
