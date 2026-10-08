@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS claim_line (
     coinsurance DECIMAL(12, 2) DEFAULT 0,
     plan_not_cover DECIMAL(12, 2) DEFAULT 0,
     amount_owed DECIMAL(12, 2) DEFAULT 0,
+    actual_billed DECIMAL(12, 2),
+    notes TEXT,
     modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
